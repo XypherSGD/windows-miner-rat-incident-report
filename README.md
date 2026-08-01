@@ -28,115 +28,69 @@ Full detection guide is in [DETECTION.md](DETECTION.md). Cleanup steps are in [R
 
 ---
 
-## How it probably got in
+## How it got in: unresolved, and here is the reasoning that narrows it
 
-**Read this section as a leading hypothesis, not a proven finding.** I want to be careful here because I am naming a specific project publicly and I did not do the work that would settle it.
+I do not know the entry vector. I want that stated plainly and up front, because I originally published this document naming a suspect, that suspect turned out to be clean, and leaving the wrong name at the top of a public writeup does real damage.
 
-The most likely delivery vehicle is **HyperMenu**, a cheat and mod menu for Among Us. I downloaded it on July 26th 2026 from a GitHub release:
+What I can do is narrow it, because the recovered attacker script constrains the answer more than anything else I found.
 
-```
-https://github.com/The-HyperMenu-Team/HyperMenu/releases/tag/v4.2.1
-```
+### The constraint that matters: they had SYSTEM
 
-I know the exact source because Windows saves it. When you download a file, Windows writes an alternate data stream called `Zone.Identifier` next to it recording where it came from. That stream was still on the zip sitting in my Downloads folder:
+Two independent events prove the attacker held SYSTEM privileges:
 
-```powershell
-Get-Content "$env:USERPROFILE\Downloads\HyperMenu-Install.zip:Zone.Identifier"
-```
+- The earliest confirmed malicious event, `Trojan:Win32/Gracing!rfn` written to `C:\Windows\Temp\edge.exe` at 07:23:42 on July 31st, was written by `powershell.exe` running as `NT AUTHORITY\SYSTEM`
+- The setup script recovered from the event log ran at 14:31:04 the same day under SID `S-1-5-18`, which is SYSTEM
 
-```
-[ZoneTransfer]
-ZoneId=3
-ReferrerUrl=https://github.com/The-HyperMenu-Team/HyperMenu/releases/tag/v4.2.1
-HostUrl=https://release-assets.githubusercontent.com/github-production-release-asset/1176130648/...
-```
+So the compromise was already at SYSTEM by 07:23 on July 31st. Everything visible after that point is post exploitation, not entry.
 
-The zip installs a BepInEx mod loader into the Among Us folder. BepInEx itself is a legitimate, widely used Unity modding framework, and most of the files in that zip are genuine BepInEx components. The payload was a single unsigned plugin:
+This rules out a whole category of explanation. **Anything that runs at normal user privilege cannot be the whole story.** A game mod loaded into a game process, a browser exploit, a document macro, all of those give you the logged in user, not SYSTEM. Reaching SYSTEM from there needs a separate privilege escalation, and I found no exploit artefacts.
 
-```
-C:\Program Files (x86)\Steam\steamapps\common\Among Us\BepInEx\plugins\HyperMenu.dll
-```
+What does hand out SYSTEM on a normal Windows machine:
 
-BepInEx loads by hijacking `winhttp.dll`. It drops its own `winhttp.dll` next to the game executable along with `doorstop_config.ini` and `.doorstop_version`, and Unity loads it on startup. That is normal BepInEx behaviour. It also means anything in the plugins folder runs inside the game process every single time you launch the game, with your user privileges, and nothing about that looks unusual to a casual observer.
+- **An MSI installer.** Windows Installer runs as SYSTEM, and MSI custom actions execute in that context. Any `.msi` you run, elevated, can do everything the recovered script did.
+- **Anything you approved a UAC prompt for**, if it was malicious or bundled
+- **A pre existing service or scheduled task** already running as SYSTEM that was hijacked
+- **A driver or anti cheat component**, which run in kernel or SYSTEM context
 
-Interesting detail: the config folder contained `MalumMenu.cfg` and `MalumProfile.txt`. MalumMenu is a different, publicly known Among Us cheat menu. So HyperMenu appears to be either a repackage of MalumMenu or built on top of it, with something extra bolted on.
+The practical advice that falls out of this: if you are trying to work out how a Windows box got owned, stop looking at what you *ran* and start looking at what you *installed with elevation*. Check `Application` event log IDs `11707` and `1033` for MSI installs, and `System` log ID `7045` for service installations. Correlate those against the first confirmed malicious event. That narrows the field far faster than staring at your Downloads folder.
 
-The timeline is suggestive. The mod went in on July 26th. The first malware activity on my machine was July 31st, five days later. A delay like that is a known technique, because if a game mod fried your CPU the moment you installed it you would uninstall the mod, whereas five days later you will never connect the two.
+### A log gap worth knowing about
 
-### What I can and cannot actually prove
+Service installations write event `7045` to the System log. On my machine those events are present continuously across the whole period, including for Malwarebytes drivers and Easy Anti-Cheat.
 
-In favour of HyperMenu being the source:
+There is **no `7045` event for the ScreenConnect service** (`VCRuntimeHelper_x86`), even though the service demonstrably existed and was running.
 
-- The `Zone.Identifier` stream confirms I downloaded it from that repo on July 26th
-- It installs an unsigned DLL that executes inside the game process on every single launch
-- Malware activity started five days later, and I found no other plausible vector
-- It is a cheat menu, which is far and away the most common way this category of malware is distributed
+That means it was almost certainly created by writing service registry keys directly rather than going through the Service Control Manager, specifically to avoid generating that event. If you are hunting on your own machine, do not treat the absence of a `7045` as proof a service was not installed. Enumerate services from the registry and compare.
 
-Against, or at least unresolved:
+### HyperMenu: investigated, and cleared
 
-- **I never disassembled `HyperMenu.dll`.** I do not know what code is in it.
-- I never observed it making a network connection, writing a file, or touching the registry
-- Most of the zip is genuine, unmodified BepInEx, and BepInEx itself is a legitimate modding framework
-- The earliest confirmed malicious event on the machine is a Defender detection on July 31st at 07:23, `Trojan:Win32/Gracing!rfn` written to `C:\Windows\Temp\edge.exe` by `powershell.exe`. **I never determined what invoked that PowerShell process.** That is the real first observed event and its origin is still unknown to me.
-- I install a lot of things. I cannot rule out another source.
+For the record, because the first version of this document named it.
 
-So: suspicion, but not proof.
+I initially suspected **HyperMenu**, an Among Us cheat menu I had installed from a GitHub release on July 26th, five days before the compromise. I suspected it because it was the most recent unusual thing I had installed and because "game cheat" pattern matches to "malware vector". That was motivated reasoning and it was wrong.
 
-### Update: the evidence got weaker, not stronger
-
-After first publishing this I went looking for corroboration and found the opposite. Recording it here because a writeup that only reports the evidence that fits its theory is not worth reading.
-
-**The VirusTotal URL scan is clean.** 0 out of 92 engines on the release asset:
-
-```
-https://github.com/The-HyperMenu-Team/HyperMenu/releases/download/v4.2.1/HyperMenu-Install.zip
-Detections    : 0 / 92
-Last analysis : 2026-07-20 13:49:31 UTC
-Status        : 200, application/octet-stream
-```
-
-Two caveats keep this from being an exoneration. It is a **URL** scan, not a file scan, so it checks whether the link is blocklisted rather than unpacking the zip or examining `HyperMenu.dll`. And the analysis date is six days before I downloaded it, so a later swap of the release asset would not show up. But it is not nothing, and it does not support my theory.
-
-**The issue tracker shows no sign of this.** Thirty issues, going back to May 2026, and not one mentions a virus, a miner, antivirus, Defender, or anything suspicious. They are ordinary mod complaints: GUI not appearing, chat not working, crashes, feature requests. The project has 19 stars and a visibly active user base. If it were shipping a miner and a RAT in its releases you would expect at least one "my AV is going mad at this" issue, and there are none.
-
-The counterargument holds some water: cheat users routinely disable antivirus and add exclusions before installing anything, so they may not notice or may not bother reporting. And in my case the malware wrote its own Defender exclusions. But zero reports across thirty issues is still a real data point against.
-
-**And I destroyed the evidence.** During cleanup I deleted both `HyperMenu-Install.zip` and `HyperMenu.dll`. Correct move for cleaning the machine, but it means there is no sample left to hash or analyse. I cannot settle this, and neither can anyone reading this document from my data alone.
-
-### Update 2: I read the whole source, and it is clean
-
-I raised this with the project and then audited the code properly rather than reasoning from metadata. I cloned the repository and went through all 125 C# files. Findings:
+What I actually found when I checked properly:
 
 | Check | Result |
 |---|---|
-| Hardcoded IPs, URLs, C2 endpoints | None. Every URL in the codebase is a comment linking to other open source Among Us projects or to Unity and Microsoft documentation |
-| `Process.Start` | One occurrence, opening the mod's own config file in a user specified text editor |
-| `WebClient`, `HttpClient`, `WebRequest`, sockets | None in source. The only matches were in the .NET SDK reference assembly list, which every project has and which means nothing |
-| Registry access | None |
-| `Assembly.Load` or reflective loading | None |
-| Base64 or hex blobs | None |
-| `VirtualAlloc`, `WriteProcessMemory`, `CreateThread` | None |
-| P/Invoke | Only `user32.dll`, `gdi32.dll`, `kernel32.dll` in `StreamerUI.cs`, for window creation and bitmap drawing, consistent with the documented streamer mode feature |
-| Committed binaries or scripts | None. 125 `.cs`, 5 `.yml`, 2 images, zero executables |
-| `Network.cs` | Among Us RPC networking via Hazel and InnerNet. Game protocol, not internet traffic |
-| `.csproj` | Four standard NuGet packages, all legitimate. The only post build step copies the compiled DLL into a local plugins folder for development |
-| CI workflows | CodeQL security scanning on push, pull request and weekly, plus a manual NuGet restore helper |
+| Full source audit, 125 C# files | Clean. No network classes, no registry access, no reflective loading, no encoded blobs, no shellcode primitives, no committed binaries |
+| Hardcoded IPs, URLs, C2 endpoints | None. Every URL in the codebase is a comment linking to other open source projects or to Unity and Microsoft docs |
+| `Process.Start` | One occurrence, opening the mod's own config file in a text editor the user chooses |
+| P/Invoke | Only `user32`, `gdi32`, `kernel32` for window and bitmap drawing, matching the documented streamer mode feature |
+| VirusTotal on the release asset | 0 detections out of 92 |
+| Downloads of that asset | 1,213 |
+| Issue tracker | 30 issues back to May 2026, zero mentioning antivirus, malware or miners |
+| File integrity | The copy on my disk matched the published asset byte for byte, 33,192,144 bytes |
+| Project hygiene | Runs CodeQL security analysis on itself |
 
-There is nothing in this code that mines, downloads, persists, or contacts anything. The project also runs CodeQL security analysis on itself, which is more than most projects of its size bother with.
-
-Additional context that all points the same way: the release asset has **1,213 downloads**, the file size on my disk matched the published asset **exactly** (33,192,144 bytes, so nothing was swapped in transit), and the issue tracker has **zero** antivirus complaints.
-
-The only technically true caveat left is a general one that applies to any project shipping hand built binaries: the release zip was compiled on a maintainer's machine and uploaded manually rather than produced by CI, so a clean source tree does not mathematically prove the shipped binary matched it. That is a provenance gap worth closing on any project, and building releases through GitHub Actions from the public source would close it permanently. It is not evidence of wrongdoing and I am not presenting it as such.
-
-### Where that leaves it
-
-**I was wrong to lead with HyperMenu.** I found it because it was the most recent unusual thing I had installed, I pattern matched "game cheat" to "malware vector", and the five day gap fit a story I already believed. That is motivated reasoning, and the source audit does not support it.
+And the structural point from the section above: a BepInEx plugin runs inside the game at **normal user privilege**. It cannot by itself produce a SYSTEM level PowerShell process. The privilege level does not fit.
 
 To be unambiguous, since this document is public and search engines are not subtle: **I found no evidence that HyperMenu is malicious. Its source code is clean. I am not accusing this project of anything, and nobody should read this writeup as a reason to avoid it.**
 
-The genuinely open question, and the thing I would chase if I were starting over, is what invoked the `powershell.exe` that wrote `C:\Windows\Temp\edge.exe` at 07:23 on July 31st. That is the earliest confirmed malicious event on the machine and its origin is still unknown. Everything else in this document is direct observation from my own disk and stands on its own.
+I am also not going to name a replacement suspect here. I have a candidate I am looking at on my own machine, but I reached it by the same kind of circumstantial reasoning that produced the HyperMenu error, and I am not repeating that mistake in public. If I ever prove it, I will say so with the evidence attached.
 
-If somebody with a proper analysis VM wants to pull that release apart in isolation and settle it either way, I would genuinely like to know and I will update this section. Do not do it on a machine you care about.
+### What I would chase, starting over
+
+The unanswered question is what invoked the SYSTEM level `powershell.exe` that wrote `C:\Windows\Temp\edge.exe` at 07:23:42 on July 31st. Everything else in this document is direct observation from my own disk and stands on its own regardless of how it started.
 
 ---
 

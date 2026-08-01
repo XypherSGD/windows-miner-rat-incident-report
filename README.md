@@ -399,6 +399,29 @@ Every scan I ran before that point was blindfolded. Including the Microsoft Defe
 
 If you take one thing from this document: **clear the policy exclusions before you trust any scan result.** A clean scan means nothing until you have verified what the scanner was allowed to look at.
 
+### Proof, rather than argument
+
+I can put a number on this, because I ran the same tool on both sides of the fix.
+
+Every scan before I removed the policy exclusions came back clean. A quick scan, and a Defender Offline scan that I believed at the time was the trustworthy last word. Both clean, while the machine was thoroughly owned.
+
+The first full scan **after** removing the exclusions ran for thirty minutes and found this:
+
+```
+2026-08-02 01:40:21   Trojan:Win32/Wacatac.H!ml
+                      C:\ProgramData\Microsoft\Windows\495sf.exe
+                      ActionSuccess: True
+```
+
+A trojan I had never seen, in `C:\ProgramData\Microsoft\Windows`, a directory covered by the attacker's exclusion list, sitting there through every previous scan. Same antivirus, same machine, same definitions. The only variable that changed was whether Defender was permitted to look.
+
+The same listing also surfaced `C:\ProgramData\Microsoft\Windows\8B86CBC`, created at 14:40:20 on July 31st, inside the deployment window. I had already cleaned a folder with that exact name under `%LOCALAPPDATA%\Microsoft\Windows` and never thought to check whether the same name existed under `ProgramData`. It did.
+
+Two lessons, and the second one cost me more than the first:
+
+1. A clean scan result is worth exactly as much as the scanner's visibility. Verify the exclusion list first, from an elevated prompt, including the Group Policy hive.
+2. When you find malware at a path, check whether the same folder name exists in the **parallel** locations: `ProgramData`, `LOCALAPPDATA` and `APPDATA` all mirror each other. I cleaned one of three copies and moved on.
+
 Related: Malwarebytes on this machine would not launch. It threw "unexpected error" every time. I never fully proved why, but a security product failing to start on a box where the attacker has Group Policy level control over the security stack is not something I would call a coincidence.
 
 ---

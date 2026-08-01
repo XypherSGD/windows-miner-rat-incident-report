@@ -1,0 +1,14 @@
+# Never commit anything pulled off the infected machine
+*.log
+*.dat
+*.bin
+*.exe
+*.dll
+*.zip
+samples/
+quarantine/
+raw/
+
+# Local scratch
+*.tmp
+scratch/

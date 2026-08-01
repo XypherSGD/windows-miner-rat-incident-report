@@ -103,9 +103,36 @@ The counterargument holds some water: cheat users routinely disable antivirus an
 
 **And I destroyed the evidence.** During cleanup I deleted both `HyperMenu-Install.zip` and `HyperMenu.dll`. Correct move for cleaning the machine, but it means there is no sample left to hash or analyse. I cannot settle this, and neither can anyone reading this document from my data alone.
 
+### Update 2: I read the whole source, and it is clean
+
+I raised this with the project and then audited the code properly rather than reasoning from metadata. I cloned the repository and went through all 125 C# files. Findings:
+
+| Check | Result |
+|---|---|
+| Hardcoded IPs, URLs, C2 endpoints | None. Every URL in the codebase is a comment linking to other open source Among Us projects or to Unity and Microsoft documentation |
+| `Process.Start` | One occurrence, opening the mod's own config file in a user specified text editor |
+| `WebClient`, `HttpClient`, `WebRequest`, sockets | None in source. The only matches were in the .NET SDK reference assembly list, which every project has and which means nothing |
+| Registry access | None |
+| `Assembly.Load` or reflective loading | None |
+| Base64 or hex blobs | None |
+| `VirtualAlloc`, `WriteProcessMemory`, `CreateThread` | None |
+| P/Invoke | Only `user32.dll`, `gdi32.dll`, `kernel32.dll` in `StreamerUI.cs`, for window creation and bitmap drawing, consistent with the documented streamer mode feature |
+| Committed binaries or scripts | None. 125 `.cs`, 5 `.yml`, 2 images, zero executables |
+| `Network.cs` | Among Us RPC networking via Hazel and InnerNet. Game protocol, not internet traffic |
+| `.csproj` | Four standard NuGet packages, all legitimate. The only post build step copies the compiled DLL into a local plugins folder for development |
+| CI workflows | CodeQL security scanning on push, pull request and weekly, plus a manual NuGet restore helper |
+
+There is nothing in this code that mines, downloads, persists, or contacts anything. The project also runs CodeQL security analysis on itself, which is more than most projects of its size bother with.
+
+Additional context that all points the same way: the release asset has **1,213 downloads**, the file size on my disk matched the published asset **exactly** (33,192,144 bytes, so nothing was swapped in transit), and the issue tracker has **zero** antivirus complaints.
+
+The only technically true caveat left is a general one that applies to any project shipping hand built binaries: the release zip was compiled on a maintainer's machine and uploaded manually rather than produced by CI, so a clean source tree does not mathematically prove the shipped binary matched it. That is a provenance gap worth closing on any project, and building releases through GitHub Actions from the public source would close it permanently. It is not evidence of wrongdoing and I am not presenting it as such.
+
 ### Where that leaves it
 
-HyperMenu is where I would start looking, but I want to be plain: **I never proved it, the available evidence leans away from it, and I am not filing a malware report against an active project on a timing coincidence.** If you maintain or use HyperMenu and you came here from a search, treat this as an unresolved question rather than an accusation.
+**I was wrong to lead with HyperMenu.** I found it because it was the most recent unusual thing I had installed, I pattern matched "game cheat" to "malware vector", and the five day gap fit a story I already believed. That is motivated reasoning, and the source audit does not support it.
+
+To be unambiguous, since this document is public and search engines are not subtle: **I found no evidence that HyperMenu is malicious. Its source code is clean. I am not accusing this project of anything, and nobody should read this writeup as a reason to avoid it.**
 
 The genuinely open question, and the thing I would chase if I were starting over, is what invoked the `powershell.exe` that wrote `C:\Windows\Temp\edge.exe` at 07:23 on July 31st. That is the earliest confirmed malicious event on the machine and its origin is still unknown. Everything else in this document is direct observation from my own disk and stands on its own.
 

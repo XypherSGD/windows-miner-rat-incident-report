@@ -80,7 +80,36 @@ Against, or at least unresolved:
 - The earliest confirmed malicious event on the machine is a Defender detection on July 31st at 07:23, `Trojan:Win32/Gracing!rfn` written to `C:\Windows\Temp\edge.exe` by `powershell.exe`. **I never determined what invoked that PowerShell process.** That is the real first observed event and its origin is still unknown to me.
 - I install a lot of things. I cannot rule out another source.
 
-So: strong suspicion, incomplete proof. If somebody wants to pull that DLL apart and settle it either way, I would genuinely like to know, and I will update this document. Until then, treat the HyperMenu link as unconfirmed and treat the rest of this writeup, which is all direct observation from my own disk, as solid.
+So: suspicion, but not proof.
+
+### Update: the evidence got weaker, not stronger
+
+After first publishing this I went looking for corroboration and found the opposite. Recording it here because a writeup that only reports the evidence that fits its theory is not worth reading.
+
+**The VirusTotal URL scan is clean.** 0 out of 92 engines on the release asset:
+
+```
+https://github.com/The-HyperMenu-Team/HyperMenu/releases/download/v4.2.1/HyperMenu-Install.zip
+Detections    : 0 / 92
+Last analysis : 2026-07-20 13:49:31 UTC
+Status        : 200, application/octet-stream
+```
+
+Two caveats keep this from being an exoneration. It is a **URL** scan, not a file scan, so it checks whether the link is blocklisted rather than unpacking the zip or examining `HyperMenu.dll`. And the analysis date is six days before I downloaded it, so a later swap of the release asset would not show up. But it is not nothing, and it does not support my theory.
+
+**The issue tracker shows no sign of this.** Thirty issues, going back to May 2026, and not one mentions a virus, a miner, antivirus, Defender, or anything suspicious. They are ordinary mod complaints: GUI not appearing, chat not working, crashes, feature requests. The project has 19 stars and a visibly active user base. If it were shipping a miner and a RAT in its releases you would expect at least one "my AV is going mad at this" issue, and there are none.
+
+The counterargument holds some water: cheat users routinely disable antivirus and add exclusions before installing anything, so they may not notice or may not bother reporting. And in my case the malware wrote its own Defender exclusions. But zero reports across thirty issues is still a real data point against.
+
+**And I destroyed the evidence.** During cleanup I deleted both `HyperMenu-Install.zip` and `HyperMenu.dll`. Correct move for cleaning the machine, but it means there is no sample left to hash or analyse. I cannot settle this, and neither can anyone reading this document from my data alone.
+
+### Where that leaves it
+
+HyperMenu is where I would start looking, but I want to be plain: **I never proved it, the available evidence leans away from it, and I am not filing a malware report against an active project on a timing coincidence.** If you maintain or use HyperMenu and you came here from a search, treat this as an unresolved question rather than an accusation.
+
+The genuinely open question, and the thing I would chase if I were starting over, is what invoked the `powershell.exe` that wrote `C:\Windows\Temp\edge.exe` at 07:23 on July 31st. That is the earliest confirmed malicious event on the machine and its origin is still unknown. Everything else in this document is direct observation from my own disk and stands on its own.
+
+If somebody with a proper analysis VM wants to pull that release apart in isolation and settle it either way, I would genuinely like to know and I will update this section. Do not do it on a machine you care about.
 
 ---
 

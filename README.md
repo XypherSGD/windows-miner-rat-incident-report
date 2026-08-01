@@ -88,9 +88,37 @@ To be unambiguous, since this document is public and search engines are not subt
 
 I am also not going to name a replacement suspect here. I have a candidate I am looking at on my own machine, but I reached it by the same kind of circumstantial reasoning that produced the HyperMenu error, and I am not repeating that mistake in public. If I ever prove it, I will say so with the evidence attached.
 
-### What I would chase, starting over
+### I ran a full forensic pass, and it did not answer it
 
-The unanswered question is what invoked the SYSTEM level `powershell.exe` that wrote `C:\Windows\Temp\edge.exe` at 07:23:42 on July 31st. Everything else in this document is direct observation from my own disk and stands on its own regardless of how it started.
+Two days after the compromise I pulled every execution artifact Windows keeps: BAM, Prefetch, UserAssist, ShimCache, MuiCache, WER crash reports and scheduled task XML. I also signature audited every application I had installed near the date.
+
+It did not identify the vector, for a reason worth knowing: **BAM and Prefetch record only the *last* execution time.** Every tool the attacker used on July 31st ran again on August 1st, so the July 31st timestamps were overwritten. The result is a clean gap right across the compromise window on a machine that was demonstrably powered on throughout it.
+
+```
+BAM, user SID:
+  2026-07-30 07:36:53   FirasNet.exe
+     ... nothing across the entire compromise ...
+  2026-07-31 20:49:40   FirasLightsV2.exe
+```
+
+That gap is not anti forensics. It is last-write semantics, plus me continuing to use the machine for two days before thinking to preserve anything.
+
+**If you are ever in this position: the moment you know you are compromised, export BAM, Prefetch, ShimCache, Amcache and the event logs before you keep working. And enable process creation auditing (Security event 4688 with command line capture) before you need it, because it is off by default and it would have answered this outright.**
+
+The pass did establish two things:
+
+- **`InstallUtil.exe` genuinely executed** (`INSTALLUTIL.EXE-9953E407.pf`). It was not merely added to the exclusion list defensively, it was actually used to run code under a trusted Microsoft process name.
+- **ScreenConnect ran its interactive client**, not just the background service (`SCREENCONNECT.WINDOWSCLIENT.E-FB849E7D.pf`, 2026-08-01 23:46:19). `ClientService.exe` sits connected doing nothing; `WindowsClient.exe` is involved in an actual session. Earlier in this document I said I could prove the channel existed but not that anyone used it. This shifts that, without settling it.
+
+I also worked through every application I had installed near the date, including several that looked suspicious on the surface. **None of them executed during the compromise window, and none had persistence.** Full table, method and per-application findings in [FORENSICS.md](FORENSICS.md), so nobody has to repeat the work.
+
+One general point from that exercise, because it nearly caught me twice: **unsigned is not the same as malicious.** Most software on my machine is unsigned. Electron apps, open source projects, Java software and small hardware vendors routinely skip code signing because certificates cost money. It is a useful sorting signal and a terrible verdict.
+
+### Where it stands
+
+Unresolved. I know the attacker had SYSTEM by 07:23:42 on July 31st, and I know in complete detail what they did with it, because they logged their own setup script. I do not know how they got it.
+
+That gap does not weaken anything else here. Every other finding is direct observation from disk and registry and stands regardless of how the first foothold was obtained.
 
 ---
 
@@ -531,6 +559,7 @@ Full breakdown, the recovered script, and how to pull it off your own machine: [
 ## Files in this repo
 
 - [ATTACKER-SCRIPT.md](ATTACKER-SCRIPT.md) - the attacker's setup script recovered in full, and how to recover it yourself
+- [FORENSICS.md](FORENSICS.md) - the hunt for the entry vector, why it failed, and every application I checked
 - [DETECTION.md](DETECTION.md) - how to check whether you have this
 - [REMEDIATION.md](REMEDIATION.md) - step by step cleanup, in the order that works
 - [IOCS.md](IOCS.md) - plain list of indicators for blocklists and threat feeds

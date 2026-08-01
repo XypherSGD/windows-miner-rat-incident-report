@@ -525,13 +525,41 @@ A full wipe and clean Windows install is still the only way to be completely cer
 
 ---
 
+## The thing I got most wrong: removing the malware is not the same as undoing it
+
+Two days after I thought this machine was clean, I went looking in the PowerShell operational event log and found the attacker's entire setup script sitting there in full. It ran as SYSTEM at 14:31:04 on July 31st, thirteen seconds before the forged certificate was issued.
+
+It survived because of a mistake on their side. Section 3 of the script disables PowerShell script block logging, but PowerShell logs a script block when it **compiles** it, before any line runs. So it logged itself in the act of switching logging off.
+
+The script has eleven numbered sections. I had cleaned up three of them. At the moment I recovered it, all of the following were **still active on a machine I had declared clean**:
+
+- **UAC disabled.** `ConsentPromptBehaviorAdmin = 0`, meaning admin processes elevate silently with no prompt
+- **PowerShell script block logging disabled**
+- **Windows Update disabled**, both by policy and by stopping `wuauserv`, `UsoSvc`, `WaaSMedicSvc` and `bits`
+- **A catch-all inbound firewall allow rule** named `WindowsPerf-In`, no program scope, no port scope, which leaves the firewall functionally open inbound
+- A matching outbound catch-all, a loopback rule, and twelve allow rules for `InstallUtil.exe`, `RegAsm.exe` and `MSBuild.exe`
+- Firewall notifications suppressed on all three profiles
+- Defender notifications suppressed
+
+None of that is a file. None of it appears in any scan. All of it would have stayed there forever.
+
+It also explains something that had been quietly wasting our time for two days. Disabling `bits` kills the transfer service that downloads **Defender signature updates**, and disabling `WaaSMedicSvc` stops Windows from repairing that. I kept telling the owner to run `MpCmdRun.exe -SignatureUpdate`, it kept silently doing nothing, and the definitions stayed frozen. I assumed a transient glitch. It was sabotage, and it meant every scan we ran used stale definitions on top of a hostile exclusion list.
+
+**If you are cleaning a Windows machine: after you have deleted everything, go back and audit what was changed.** UAC, Windows Update, firewall rules and profiles, logging and audit policy, Defender policy, the Group Policy hive. That is where the durable damage is, and it is completely silent.
+
+Full breakdown, the recovered script, and how to pull it off your own machine: [ATTACKER-SCRIPT.md](ATTACKER-SCRIPT.md).
+
+---
+
 ## Files in this repo
 
+- [ATTACKER-SCRIPT.md](ATTACKER-SCRIPT.md) - the attacker's setup script recovered in full, and how to recover it yourself
 - [DETECTION.md](DETECTION.md) - how to check whether you have this
 - [REMEDIATION.md](REMEDIATION.md) - step by step cleanup, in the order that works
 - [IOCS.md](IOCS.md) - plain list of indicators for blocklists and threat feeds
 - [TIMELINE.md](TIMELINE.md) - full chronology with timestamps
-- [scripts/](scripts/) - the PowerShell used for auditing and cleanup
+- [scripts/audit.ps1](scripts/audit.ps1) - read only audit of every surface described here
+- [scripts/undo-sabotage.ps1](scripts/undo-sabotage.ps1) - reverses the configuration changes above
 
 ---
 
